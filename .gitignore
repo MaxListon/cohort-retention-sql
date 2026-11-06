@@ -1,0 +1,4 @@
+output/cohort_real.db
+output/cohort_demo.db
+__pycache__/
+*.pyc
