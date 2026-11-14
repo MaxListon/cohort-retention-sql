@@ -1,0 +1,25 @@
+name: SQL correctness tests
+on:
+  push:
+    paths-ignore: ['**.md']
+  pull_request:
+    paths-ignore: ['**.md']
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: tests-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ['3.11', '3.12', '3.13']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - run: pip install numpy pytest
+      - run: python -m pytest tests/ -v
