@@ -27,7 +27,31 @@ output/
   cohort_demo.db                    -- synthetic data loaded into SQLite
   real/*.csv                        -- query results on the real data, already run
   *.csv                             -- query results on the synthetic data, already run
+tests/
+  test_cohort_analysis.py           -- builds both datasets and checks the validation/
+                                        queries against correctness invariants (below)
 ```
+
+## Tests
+
+`tests/test_cohort_analysis.py` rebuilds both the synthetic and real Olist
+databases from scratch and runs every `validation/*.sqlite.sql` query
+against each of them, checking properties that must hold regardless of
+dataset: month-0 retention is always 100%, `active_customers` never
+exceeds `cohort_size`, nth-order retention counts are monotonically
+non-increasing, cumulative LTV per cohort never decreases, no
+`(cohort_month, period_number)` pair is duplicated, and the real dataset's
+row counts match Olist's well-known signature counts. It also checks that
+every Postgres-dialect query in `sql/` has a SQLite-dialect twin in
+`validation/`.
+
+```bash
+pip install numpy pytest   # numpy is only needed to regenerate the synthetic dataset
+python -m pytest tests/ -v
+```
+
+CI (`.github/workflows/tests.yml`) runs this on every push and pull
+request across Python 3.11-3.13.
 
 The SQL in `sql/` is written for **PostgreSQL** (also runs unmodified on
 Snowflake, Redshift, and BigQuery — they all support standard window
