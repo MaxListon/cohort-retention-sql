@@ -1,10 +1,9 @@
 # Cohort retention analysis — e-commerce (Olist-shaped)
 
 A self-contained cohort retention project built entirely with hand-written SQL
-window functions, on a dataset shaped exactly like the real **Olist Brazilian
-E-Commerce** dataset (same tables, same columns, same gotchas). No ORM, no
-BI tool, no dbt — just the queries an analyst would actually write and defend
-in an interview.
+window functions, on the real **Olist Brazilian E-Commerce** dataset (same
+tables, same columns, same gotchas). No ORM, no BI tool, no dbt — just the
+queries an analyst would actually write on this data.
 
 ## What's in here
 
@@ -59,13 +58,12 @@ This project ships with **both**:
 repeat-purchase rate of about **3%** — of 93,358 customers who placed a
 first order, only 2,801 ever placed a second. Month-1 retention across
 cohorts runs **0.2%–0.8%**, not the double-digit percentages you'd see
-in a subscription product. That's a real, correctly-computed finding —
-not a bug — and it's one of the more interesting things to talk through
-in an interview: a single-vendor marketplace where third-party sellers
-fulfill directly has structurally different retention dynamics than a
-SaaS or app-based product. The synthetic dataset exists purely so the
-heatmap has visible texture to demonstrate the SQL technique; the real
-numbers are the ones to actually cite.
+in a subscription product. That's a real, correctly-computed finding — not a bug: a single-vendor
+marketplace where third-party sellers fulfill directly has structurally
+different retention dynamics than a SaaS or app-based product. The
+synthetic dataset exists purely so the heatmap has visible texture to
+demonstrate the SQL technique; the real numbers are the ones that describe
+the actual dataset.
 
 Point `sql/*.sql` (the Postgres-dialect files) at any database loaded from
 `sql/01_schema.sql` — real or synthetic — and every query runs unmodified.
@@ -73,7 +71,7 @@ Point `sql/*.sql` (the Postgres-dialect files) at any database loaded from
 ## The gotcha that matters most: `customer_id` vs `customer_unique_id`
 
 This is the single most important thing to know about this dataset, real or
-synthetic, and it's a great thing to bring up in an interview:
+synthetic:
 
 > In Olist, `customer_id` is a **surrogate key minted per order** — a
 > customer who orders three times gets three different `customer_id`
@@ -92,8 +90,8 @@ cohort membership with people who never actually received anything).
 **Period number**: integer months between the cohort month and the month of
 a later order (0 = acquisition month itself, 1 = the next month, etc.),
 computed explicitly from `EXTRACT(YEAR ...)` / `EXTRACT(MONTH ...)` rather
-than a date-diff helper — this is a common interview follow-up ("how would
-you compute a month difference by hand?").
+than a date-diff helper, so the month arithmetic is visible in the query
+instead of hidden inside a function.
 
 **Immature cohorts**: the most recent cohorts haven't had 11 months to
 mature yet. The pipeline scaffolds every (cohort, period) pair that *could*
@@ -207,27 +205,25 @@ bundled files:
    overwriting the bundled copies.
 3. Re-run `python3 data/load_real_olist_data.py`.
 
-## Interview talking points this project is built to support
+## Design notes
 
-- **"Walk me through how you'd build a cohort retention table in SQL."**
-  Start from the base fact table → `MIN() OVER` to label cohorts →
-  `FIRST_VALUE() OVER` for cohort size → derive `retention_rate` → mention
-  the immature-cohort scaffolding problem unprompted.
-- **"What's the difference between `ROW_NUMBER`, `RANK`, and `DENSE_RANK`?"**
-  `DENSE_RANK` is used here for cohort-size ranking; be ready to explain why
-  ties don't skip numbers the way `RANK` would, and why `ROW_NUMBER` was
-  the right (and only correct) choice for order sequencing, where ties
-  must never collapse.
-- **"N to N+1 retention"** — this is Part A of `03_order_sequence_and_ltv.sql`:
-  of people who reached order N, what % reached order N+1, via `LEAD()`.
-  This is the exact framing interviewers at Instacart-style companies ask
-  for.
-- **"How do you avoid a self-join when computing cumulative revenue?"**
-  `SUM() OVER (PARTITION BY cohort ORDER BY period ROWS BETWEEN UNBOUNDED
-  PRECEDING AND CURRENT ROW)` — walk through what the frame clause does
-  and why `ROWS` (not `RANGE`) matters when `period_number` can repeat
-  conceptually across partitions but not within one.
-- **A classic gotcha to raise proactively**: the `customer_id` vs
-  `customer_unique_id` trap described above. Bringing this up unprompted
-  signals you've actually worked with messy, real-world schemas rather
-  than textbook ones.
+- **Building the cohort table end to end**: start from the base fact table,
+  use `MIN() OVER` to label each customer's cohort, `FIRST_VALUE() OVER` to
+  get the cohort size onto every row, then derive `retention_rate` as a
+  zero-join row-level computation. The immature-cohort scaffolding step
+  (above) has to run before this, or recent cohorts look artificially bad.
+- **`ROW_NUMBER` vs `RANK` vs `DENSE_RANK`**: `DENSE_RANK` is used here for
+  cohort-size ranking, where ties shouldn't skip numbers the way `RANK`
+  would. `ROW_NUMBER` is the only correct choice for order sequencing,
+  where ties must never collapse two orders into the same sequence number.
+- **N-to-N+1 retention** (Part A of `03_order_sequence_and_ltv.sql`): of
+  customers who reached order N, what percentage reached order N+1, via
+  `LEAD()` rather than a self-join.
+- **Avoiding a self-join for cumulative revenue**: `SUM() OVER (PARTITION BY
+  cohort ORDER BY period ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)`.
+  `ROWS` rather than `RANGE` matters here because `period_number` values
+  are distinct within a partition, so a `ROWS` frame and a `RANGE` frame
+  would happen to agree on this data — but `ROWS` is the one that still
+  works correctly if that ever stops being true.
+- **The `customer_id` vs `customer_unique_id` trap** described above is the
+  single easiest way to get this analysis silently wrong on this dataset.
